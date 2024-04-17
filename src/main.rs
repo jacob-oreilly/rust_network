@@ -1,12 +1,12 @@
-use std::{io::{Read, Write}, net::{TcpListener, TcpStream}};
+use std::{fmt::format, fs, io::{BufRead, BufReader, Write}, net::{TcpListener, TcpStream}};
 
 fn main() {
-    match TcpListener::bind("127.0.0.1:80") {
+    match TcpListener::bind("127.0.0.1:7373") {
         Ok(listener) => {
             println!("Server connected");
             for stream in listener.incoming() {
                 let stream = stream.unwrap();
-                let result = handle_client(stream);
+                let result = handle_connection(stream);
                 println!("[Client result]: {:?}", result);
             }
         }
@@ -16,9 +16,21 @@ fn main() {
     };
 }
 
-fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
-    println!("[Client connected]: {:?}", stream.peer_addr());
-    stream.write(b"hello")?;
-    stream.read(&mut [0; 128])?;
-    Ok(())
+fn handle_connection(mut stream: TcpStream) {
+    let buf_reader = BufReader::new(&mut stream);
+    let request_line = buf_reader.lines().next().unwrap().unwrap();
+
+    let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
+        ("HTTP/1.1 200 OK", "index.html")
+    } else {
+        ("HTTP/1.1 404 NOT FOUND", "404.html")
+    };
+
+    let contents = fs::read_to_string(filename).unwrap();
+    let length = contents.len();
+
+    let response =
+        format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+
+    stream.write_all(response.as_bytes()).unwrap();
 }
